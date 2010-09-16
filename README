@@ -1,0 +1,104 @@
+OMAP Capture driver
+
+This driver can set up a pin on the OMAP 35xx processor as an input
+capture source. The original purpose was to measure the frequency of
+a signal that corresponded to the RPM of a motor.
+Only 4 pins on the 35XX can be used  for capture: 144,
+145, 146 and 147.  The driver assumes that the capture
+pin is in  "Mode 2" (pwm_evt).  The driver default is to set up
+pin 147 for capture.  To set up one of the other pins as capture,
+invoke the driver with "capture_pin=xxx", where "xxx"
+is one of 144, 145, 146 and 147. Pulse width (rising edge to falling
+edge) and frequency measurements can be made on a signal connected
+to the capture pin. The driver continuously captures width and
+frequency counts.  If there is no input on the pin, or the input goes
+away, the driver will report 0 for pulse width and frequency counts.
+The ioctl interface will provide an integer count for pulse width,
+frequency and clock source.  To determine the values in milliseconds,
+divide the returned count of width or frequency by the clock source
+count and multiply by 1000.
+
+
+Compiling:
+make V=1 -f Makefile ARCH=arm KERNELDIR=/home/fagius/git/sakoman/linux-omap-2.6_head RCH=arm CROSS_COMPILE=/usr/local/angstrom/arm/bin/arm-angstrom-linux-gnueabi-
+
+Installing:
+
+insmod omap_capture.ko capture_pin=146
+
+Testing:
+
+The following c code can be used to access driver data:
+
+/* Test code for the omap capture driver 
+ *
+ * Copyright (C) 2010 iRobot Corporation
+ * Frank Agius <fgius@irobot.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA
+ *
+ */
+
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+
+typedef uint8_t		u8;
+typedef uint16_t	u16;
+#define CAPTURE_IOC_MAGIC ';'
+#define CAPTURE_IOCX_READ          _IO(CAPTURE_IOC_MAGIC, 0)
+
+struct omap_capture_user_parms {
+  int channel;
+  int average;
+  int status;
+  unsigned long clock;
+  unsigned long pulse_width;
+  unsigned long frequency;
+};
+
+int main(int argc, char **argv)
+{
+  int j;
+  int d = open("/dev/omap-capture", O_RDWR | O_NONBLOCK);
+  int ret;
+  float pulse_width,frequency;
+  struct omap_capture_user_parms *par;
+
+  if (d == -1)
+  {
+    printf("could not open capture device\n");
+    return 1;
+  }
+
+  par = malloc(sizeof(struct omap_capture_user_parms));
+
+  // read capture info
+  ret = ioctl(d, CAPTURE_IOCX_READ, par);
+
+  pulse_width = ((float)par->pulse_width / (float)par->clock) * 1000 * 1000;
+  frequency = ((float)par->frequency / (float)par->clock) * 1000 * 1000;
+
+  printf("pulse_width = %0.3f us frequency = %0.3f us\n",pulse_width,frequency);
+
+  return 0;
+}
